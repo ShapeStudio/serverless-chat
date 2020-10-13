@@ -10,6 +10,14 @@ Parameters:
   TableName:
     Type: String
     Default: 'simplechat_connections'
+    Description: (Required lallaal The name of the new DynamoDB to store connection identifiers for each connected clients. Minimum 3 characters
+    MinLength: 3
+    MaxLength: 50
+    AllowedPattern: ^[A-Za-z_]+$
+    ConstraintDescription: 'Required. Can be characters and underscore only. No numbers or special characters allowed.'
+  SimpleChatRooms:
+    Type: String
+    Default: 'simplechat_rooms'
     Description: (Required) The name of the new DynamoDB to store connection identifiers for each connected clients. Minimum 3 characters
     MinLength: 3
     MaxLength: 50
@@ -83,11 +91,32 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SendMessageFunction.Arn}/invocations
+  AuthRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SimpleChatWebSocket
+      RouteKey: authenticate
+      AuthorizationType: NONE
+      OperationName: AuthRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref AuthInteg
+  AuthInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref SimpleChatWebSocket
+      Description: Auth Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthenticateFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
     - ConnectRoute
     - SendRoute
+    - AuthRoute
     - DisconnectRoute
     Properties:
       ApiId: !Ref SimpleChatWebSocket
@@ -113,6 +142,21 @@ Resources:
       SSESpecification:
         SSEEnabled: True
       TableName: !Ref TableName
+  ChatRoomsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: "roomId"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "roomId"
+        KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      SSESpecification:
+        SSEEnabled: True
+      TableName: !Ref SimpleChatRooms
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -161,13 +205,14 @@ Resources:
       CodeUri: sendmessage/
       Handler: app.handler
       MemorySize: 256
-      Runtime: nodejs12.x
+      Runtime: nodejs10.x
       Environment:
         Variables:
           TABLE_NAME: !Ref TableName
+          ROOMS: !Ref ChatRoomsTable
       Policies:
       - DynamoDBCrudPolicy:
-          TableName: !Ref TableName
+          TableName: "*"
       - Statement:
         - Effect: Allow
           Action:
@@ -181,6 +226,34 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref SendMessageFunction
+      Principal: apigateway.amazonaws.com
+  AuthenticateFunction:
+      Type: AWS::Serverless::Function
+      Properties:
+        CodeUri: authenticate/
+        Handler: app.handler
+        MemorySize: 256
+        Runtime: nodejs10.x
+        Environment:
+          Variables:
+            TABLE_NAME: !Ref TableName
+            ROOMS: !Ref ChatRoomsTable
+        Policies:
+        - DynamoDBCrudPolicy:
+            TableName: "*"
+        - Statement:
+          - Effect: Allow
+            Action:
+            - 'execute-api:ManageConnections'
+            Resource:
+            - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SimpleChatWebSocket}/*'
+  AuthenticatePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - SimpleChatWebSocket
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AuthenticateFunction
       Principal: apigateway.amazonaws.com
 
 Outputs:
@@ -199,6 +272,10 @@ Outputs:
   SendMessageFunctionArn:
     Description: "SendMessage function ARN"
     Value: !GetAtt SendMessageFunction.Arn
+
+  AuthenticateFunctionArn:
+    Description: "Autenticate function ARN"
+    Value: !GetAtt AuthenticateFunction.Arn
 
   WebSocketURI:
     Description: "The WSS Protocol URI to connect to"
