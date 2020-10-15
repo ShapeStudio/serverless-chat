@@ -9,6 +9,7 @@ exports.handler = async event => {
 
   console.log('CONNECTED Event: ', event)
 
+  /*
   const putParams = {
     TableName: process.env.TABLE_NAME,
     Item: {
@@ -23,6 +24,7 @@ exports.handler = async event => {
     console.log("errr", err)
     return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) };
   }
+  */
 
 
   //const { send } = getSocketContext(event);
