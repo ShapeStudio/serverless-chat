@@ -14,7 +14,7 @@ Parameters:
     MinLength: 3
     MaxLength: 50
     AllowedPattern: ^[A-Za-z_]+$
-    ConstraintDescription: 'Required. Can be characters and underscore only. No numbers or special characters allowed.'
+    ConstraintDescription: 'Required.ew Can be characters and underscore only. No numbers or special characters allowed.'
   SimpleChatRooms:
     Type: String
     Default: 'simplechat_rooms'
@@ -22,7 +22,7 @@ Parameters:
     MinLength: 3
     MaxLength: 50
     AllowedPattern: ^[A-Za-z_]+$
-    ConstraintDescription: 'Required. Can be characters and underscore only. No numbers or special characters allowed.'
+    ConstraintDescription: 'Required.we Can be characters and underscore only. No numbers or special characters allowed.'
 
 Resources:
   SimpleChatWebSocket:
@@ -37,6 +37,7 @@ Resources:
       ApiId: !Ref SimpleChatWebSocket
       RouteKey: $connect
       AuthorizationType: NONE
+      #AuthorizerId: !Ref Auth
       OperationName: ConnectRoute
       Target: !Join
         - '/'
@@ -91,32 +92,11 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SendMessageFunction.Arn}/invocations
-  AuthRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref SimpleChatWebSocket
-      RouteKey: authenticate
-      AuthorizationType: NONE
-      OperationName: AuthRoute
-      Target: !Join
-        - '/'
-        - - 'integrations'
-          - !Ref AuthInteg
-  AuthInteg:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref SimpleChatWebSocket
-      Description: Auth Integration
-      IntegrationType: AWS_PROXY
-      IntegrationUri: 
-        Fn::Sub:
-            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthenticateFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
     - ConnectRoute
     - SendRoute
-    - AuthRoute
     - DisconnectRoute
     Properties:
       ApiId: !Ref SimpleChatWebSocket
@@ -228,25 +208,27 @@ Resources:
       FunctionName: !Ref SendMessageFunction
       Principal: apigateway.amazonaws.com
   AuthenticateFunction:
-      Type: AWS::Serverless::Function
-      Properties:
-        CodeUri: authenticate/
-        Handler: app.handler
-        MemorySize: 256
-        Runtime: nodejs10.x
-        Environment:
-          Variables:
-            TABLE_NAME: !Ref TableName
-            ROOMS: !Ref ChatRoomsTable
-        Policies:
-        - DynamoDBCrudPolicy:
-            TableName: "*"
-        - Statement:
-          - Effect: Allow
-            Action:
-            - 'execute-api:ManageConnections'
-            Resource:
-            - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SimpleChatWebSocket}/*'
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: authenticate/
+      Handler: app.handler
+      MemorySize: 256
+      Runtime: nodejs10.x
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+          ROOMS: !Ref ChatRoomsTable
+          JWT_SECRET: 'eh011userk444yse320r3092sta'
+      Policies:
+      - AWSLambdaFullAccess
+      - DynamoDBCrudPolicy:
+          TableName: '*'
+      - Statement:
+        - Effect: Allow 
+          Action:
+          - 'execute-api:ManageConnections'
+          Resource:
+          - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SimpleChatWebSocket}/*'
   AuthenticatePermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -255,6 +237,17 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref AuthenticateFunction
       Principal: apigateway.amazonaws.com
+  #Auth:
+  #  Type: "AWS::ApiGatewayV2::Authorizer"
+  #  Properties:
+  #    Name: Authenticate
+  #    ApiId: !Ref SimpleChatWebSocket
+  #    AuthorizerType: REQUEST
+  #    AuthorizerUri:
+  #      Fn::Sub:
+  #        arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthenticateFunction.Arn}/invocations
+  #    IdentitySource:
+  #      - "request.querystring.Authorization"
 
 Outputs:
   ConnectionsTableArn:

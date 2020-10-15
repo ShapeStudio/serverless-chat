@@ -7,7 +7,7 @@ const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10', region: 
 
 exports.handler = async event => {
 
-  console.log('CONNECTED: ', event.body)
+  console.log('CONNECTED Event: ', event)
 
   const putParams = {
     TableName: process.env.TABLE_NAME,
@@ -23,6 +23,10 @@ exports.handler = async event => {
     console.log("errr", err)
     return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) };
   }
+
+
+  //const { send } = getSocketContext(event);
+  //await send(JSON.stringify({ status: "200", message: 'Connected and authenticated' }));
 
   return { statusCode: 200, body: 'Connected.' };
 };
