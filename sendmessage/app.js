@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: MIT-0
 
 const AWS = require('aws-sdk');
+const { v4: uuidv4 } = require('uuid');
 
 const {
-  find
+  find, filter
 } = require('lodash')
 
 const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10', region: process.env.AWS_REGION });
@@ -13,89 +14,115 @@ const { TABLE_NAME,  ROOMS } = process.env;
 
 exports.handler = async event => {
 
-  console.log("Process env:", process.env)
+  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
+    apiVersion: '2018-11-29',
+    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  });
 
+  console.log("Process env:", process.env);
+
+  let now = Date.now();
   let connectionData;
   let rooms;
-  let message;
+  let room;
+  let message = {
+    userId: "",
+    createdAt: now,
+    text: "",
+    assetId: "",
+    id: uuidv4()
+  };
+  let response = {}
   let roomId;
-  let userId;
   
   const postData = JSON.parse(event.body);
-  console.log("Got data:", postData.data)
+  console.log("Got data:", postData.data);
 
   if(!postData.data){
-    message = JSON.parse(postData).message
+    message.text = JSON.parse(postData).message
     roomId = JSON.parse(postData).roomId
-    userId = JSON.parse(postData).userId
+    message.userId = JSON.parse(postData).userId
   }else{
-    message = postData.data.message
+    message.text = postData.data.message
     roomId = postData.data.roomId
-    userId = postData.data.userId
+    message.userId = postData.data.userId
   }
 
-  console.log(`Got message: ${message} from: ${userId} for room id: ${roomId}`)
+  console.log(`Got message: ${message.text} from: ${message.userId} for room id: ${roomId}`);
 
   try {
 
-    connectionData = await ddb.scan({ TableName: TABLE_NAME, ProjectionExpression: 'connectionId, userId' }).promise();
     rooms = await ddb.scan({ TableName: ROOMS, FilterExpression : 'roomId = :roomId', ExpressionAttributeValues: {':roomId' : roomId} }).promise();
+    
+    room = rooms.Items[0]
+    //TODO: If there is no room add it. Remove this later on
+    if(!room){
+      room = {
+        users:[ `${message.userId}` ],
+        messages: [],
+        roomId: roomId
+      } 
+    }
+    console.log("Current room: ", room)
+
+    connectionData = await ddb.scan({ TableName: TABLE_NAME, ProjectionExpression: 'connectionId, userId' }).promise();
     console.log("rooms:", rooms);
 
   } catch (e) {
     console.log("error:", e)
     return { statusCode: 500, body: e.stack };
   }
-  console.log("Connected users: ", connectionData)
+  console.log("All Connected users: ", connectionData.Items)
 
-  let room = rooms.Items[0]
-  console.log("Room: ", room)
-
-  //TODO: remove this from sendMessage
-  if(!room){
-    room = {
-      users:["1"],
-      messages:["hello"],
-      roomId: "2"
-    } 
+  // SAVE ROOM & MESSAGES
+  room.messages.push(JSON.stringify(message))
+  
+  //Add user if its not in the room
+  const hit = find(room.users, uid => { return uid === message.userId.toString() })
+  console.log(`hit: ${hit}`)
+  if(!hit){
+    room.users.push(message.userId)
   }
-  console.log("Current room: ", room)
 
-  room.messages.push(message)
-
-  const putParams = {
+  const newRoom = {
     TableName: ROOMS,
     Item: room
   };
-  console.log('saving data:', putParams);
-
+  console.log('Saving message:', newRoom);
+  //TODO: Check if user has a permission for this room
   try {
-    //TODO: Check if user has a permission for this room (if he is in the room)
-    await ddb.put(putParams).promise();
-    console.log("saved")
+    await ddb.put(newRoom).promise();
+    console.log("New room saved")
   } catch (err) {
     console.log("errr", err)
     return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) };
   }
-  
-  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-    apiVersion: '2018-11-29',
-    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
-  });
+
+  let hitt = false
+  const currentlyConnected = filter(connectionData.Items, Item => {
+
+    console.log("users - current", room.users, Item.userId.toString())
+
+    hitt = (find(room.users, uid => { return uid === Item.userId.toString() })) ? true : false
+    console.log(hitt)
+
+    return hitt
+  })
+  console.log(`currentlyConnected in the room: ${currentlyConnected}`)
+
+  response = {
+    type: "NEW_MESSAGE",
+    message,
+    roomId,
+    createdAt: now
+  }
   
   //TODO: Important: Make better by only getting connections for room users
-  const postCalls = connectionData.Items.map(async ({ connectionId, userId }) => {
+  const postCalls = currentlyConnected.map(async ({ connectionId, userId }) => {
     try {
 
-      console.log("looped user: ", userId)
-      const hit = find(room.users, uid => {
-        return userId == uid
-      })
-      console.log(hit)
-
-      // Check if userId is in the current room send
       if(hit){
-        await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify({message, roomId, userId}) }).promise();
+        await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(response)}).promise();
       }
       
     } catch (e) {

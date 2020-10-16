@@ -149,7 +149,13 @@ Resources:
           TABLE_NAME: !Ref TableName
       Policies:
       - DynamoDBCrudPolicy:
-          TableName: !Ref TableName
+          TableName: "*"
+      - Statement:
+        - Effect: Allow
+          Action:
+          - 'execute-api:ManageConnections'
+          Resource:
+          - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SimpleChatWebSocket}/*'
   OnConnectPermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -237,7 +243,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref AuthenticateFunction
       Principal: apigateway.amazonaws.com
-  #Auth:
+  #Auth: This shit is not working..
   #  Type: "AWS::ApiGatewayV2::Authorizer"
   #  Properties:
   #    Name: Authenticate

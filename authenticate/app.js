@@ -35,7 +35,7 @@ exports.handler = async (event, context, callback) => {
       TableName: TABLE_NAME,
       Item: {
         connectionId: event.requestContext.connectionId,
-        timeStamp: Date.now(),
+        createdAt: Date.now(),
         userId: decoded.user.id
       }
     };
