@@ -23,6 +23,14 @@ Parameters:
     MaxLength: 50
     AllowedPattern: ^[A-Za-z_]+$
     ConstraintDescription: 'Required.we Can be characters and underscore only. No numbers or special characters allowed.'
+  SimpleChatMessages:
+    Type: String
+    Default: 'simplechat_messages'
+    Description: (Required) The name of the new DynamoDB to store connection identifiers for each connected clients. Minimum 3 characters
+    MinLength: 3
+    MaxLength: 50
+    AllowedPattern: ^[A-Za-z_]+$
+    ConstraintDescription: 'Required.we Can be characters and underscore only. No numbers or special characters allowed.'  
 
 Resources:
   SimpleChatWebSocket:
@@ -137,6 +145,23 @@ Resources:
       SSESpecification:
         SSEEnabled: True
       TableName: !Ref SimpleChatRooms
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: "messageId"
+        AttributeType: "S"
+      - AttributeName: "roomId"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "messageId"
+        KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      SSESpecification:
+        SSEEnabled: True
+      TableName: !Ref SimpleChatMessages    
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -196,6 +221,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref TableName
           ROOMS: !Ref ChatRoomsTable
+          MESSAGES: !Ref MessagesTable
       Policies:
       - DynamoDBCrudPolicy:
           TableName: "*"

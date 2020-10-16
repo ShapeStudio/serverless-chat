@@ -10,7 +10,7 @@ const {
 
 const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10', region: process.env.AWS_REGION });
 
-const { TABLE_NAME,  ROOMS } = process.env;
+const { TABLE_NAME,  ROOMS, MESSAGES } = process.env;
 
 exports.handler = async event => {
 
@@ -26,45 +26,47 @@ exports.handler = async event => {
   let rooms;
   let room;
   let message = {
+    roomId: "",
     userId: "",
     createdAt: now,
     text: "",
     assetId: "",
-    id: uuidv4()
+    messageId: uuidv4()
   };
   let response = {}
-  let roomId;
   
   const postData = JSON.parse(event.body);
   console.log("Got data:", postData.data);
 
   if(!postData.data){
     message.text = JSON.parse(postData).message
-    roomId = JSON.parse(postData).roomId
+    message.roomId = JSON.parse(postData).roomId
     message.userId = JSON.parse(postData).userId
   }else{
     message.text = postData.data.message
-    roomId = postData.data.roomId
+    message.roomId = postData.data.roomId
     message.userId = postData.data.userId
   }
 
-  console.log(`Got message: ${message.text} from: ${message.userId} for room id: ${roomId}`);
+  console.log(`Got message: ${message.text} from: ${message.userId} for room id: ${message.roomId}`);
 
   try {
 
-    rooms = await ddb.scan({ TableName: ROOMS, FilterExpression : 'roomId = :roomId', ExpressionAttributeValues: {':roomId' : roomId} }).promise();
-    
+    // READ 1
+    rooms = await ddb.scan({ TableName: ROOMS, FilterExpression : 'roomId = :roomId', ExpressionAttributeValues: {':roomId' : message.roomId} }).promise();
     room = rooms.Items[0]
+
     //TODO: If there is no room add it. Remove this later on
     if(!room){
       room = {
         users:[ `${message.userId}` ],
-        messages: [],
-        roomId: roomId
+        createdAt: now,
+        roomId: message.roomId
       } 
     }
-    console.log("Current room: ", room)
+    console.log("Selected room: ", room)
 
+     // READ 2
     connectionData = await ddb.scan({ TableName: TABLE_NAME, ProjectionExpression: 'connectionId, userId' }).promise();
     console.log("rooms:", rooms);
 
@@ -74,8 +76,20 @@ exports.handler = async event => {
   }
   console.log("All Connected users: ", connectionData.Items)
 
-  // SAVE ROOM & MESSAGES
-  room.messages.push(JSON.stringify(message))
+  // SAVE MESSAGE
+  const newMessage = {
+    TableName: MESSAGES,
+    Item: message
+  };
+
+  try {
+    await ddb.put(newMessage).promise();
+  } catch (err) {
+    console.log("errr", err)
+    return { statusCode: 500, body: 'Failed to connect to DB: ' + JSON.stringify(err) };
+  }
+
+  room.updatedAt = now
   
   //Add user if its not in the room
   const hit = find(room.users, uid => { return uid === message.userId.toString() })
@@ -88,8 +102,9 @@ exports.handler = async event => {
     TableName: ROOMS,
     Item: room
   };
-  console.log('Saving message:', newRoom);
+  console.log('Saving new room:', newRoom);
   //TODO: Check if user has a permission for this room
+  // WRITE 1
   try {
     await ddb.put(newRoom).promise();
     console.log("New room saved")
@@ -101,10 +116,10 @@ exports.handler = async event => {
   let hitt = false
   const currentlyConnected = filter(connectionData.Items, Item => {
 
-    console.log("users - current", room.users, Item.userId.toString())
+    // console.log("users - current", room.users, Item.userId.toString())
 
     hitt = (find(room.users, uid => { return uid === Item.userId.toString() })) ? true : false
-    console.log(hitt)
+    // console.log(hitt)
 
     return hitt
   })
@@ -113,18 +128,12 @@ exports.handler = async event => {
   response = {
     type: "NEW_MESSAGE",
     message,
-    roomId,
     createdAt: now
   }
   
-  //TODO: Important: Make better by only getting connections for room users
   const postCalls = currentlyConnected.map(async ({ connectionId, userId }) => {
     try {
-
-      if(hit){
-        await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(response)}).promise();
-      }
-      
+      await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(response)}).promise(); 
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection, deleting ${connectionId}`);

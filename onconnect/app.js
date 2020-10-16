@@ -35,8 +35,10 @@ exports.handler = async event => {
 
   const postCalls = connectionData.Items.map(async ({ connectionId, userId }) => {
     try {
+        console.log(`ConnectedId and userId - ${connectionId} - ${userId}`)
         await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(roomStats) }).promise();
     } catch (e) {
+      console.log("error sending me:", e)
       if (e.statusCode === 410) {
         console.log(`Found stale connection, deleting ${connectionId}`);
         await ddb.delete({ TableName: TABLE_NAME, Key: { connectionId } }).promise();
