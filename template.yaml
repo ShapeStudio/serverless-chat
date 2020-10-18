@@ -151,8 +151,6 @@ Resources:
       AttributeDefinitions:
       - AttributeName: "messageId"
         AttributeType: "S"
-      - AttributeName: "roomId"
-        AttributeType: "S"
       KeySchema:
       - AttributeName: "messageId"
         KeyType: "HASH"
@@ -250,7 +248,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref TableName
           ROOMS: !Ref ChatRoomsTable
-          JWT_SECRET: 'eh011userk444yse320r3092sta'
+          JWT_SECRET: 'pabluland'
       Policies:
       - AWSLambdaFullAccess
       - DynamoDBCrudPolicy:

@@ -32,11 +32,21 @@ exports.handler = async event => {
     itemsSold: 0,
     currentDiscount: 0
   }
+  console.log(roomStats)
 
+  /*
   const postCalls = connectionData.Items.map(async ({ connectionId, userId }) => {
     try {
         console.log(`ConnectedId and userId - ${connectionId} - ${userId}`)
+
+        try{
+          await apigwManagementApi.getConnection({ ConnectionId: connectionId}).promise();
+        }catch(err){
+          console.log("error getting connection: ",err, err.stack);
+        }
+
         await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(roomStats) }).promise();
+
     } catch (e) {
       console.log("error sending me:", e)
       if (e.statusCode === 410) {
@@ -48,6 +58,14 @@ exports.handler = async event => {
       }
     }
   })
+
+  try {
+    await Promise.all(postCalls);
+  } catch (e) {
+    console.log("error:", e)
+    return { statusCode: 500, body: e.stack };
+  }
+  */
 
   return { statusCode: 200, body: 'Connected.' };
 };

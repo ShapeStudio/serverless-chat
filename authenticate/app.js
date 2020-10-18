@@ -36,7 +36,10 @@ exports.handler = async (event, context, callback) => {
       Item: {
         connectionId: event.requestContext.connectionId,
         createdAt: Date.now(),
-        userId: decoded.user.id
+        userId: decoded.user.id,
+        firstName: decoded.firstName,
+        lastName: decoded.lastName,
+        avatar: decoded.avatar,
       }
     };
   

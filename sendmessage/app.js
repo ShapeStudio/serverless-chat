@@ -115,7 +115,6 @@ exports.handler = async event => {
 
   let hitt = false
   const currentlyConnected = filter(connectionData.Items, Item => {
-
     // console.log("users - current", room.users, Item.userId.toString())
 
     hitt = (find(room.users, uid => { return uid === Item.userId.toString() })) ? true : false
@@ -125,9 +124,18 @@ exports.handler = async event => {
   })
   console.log(`currentlyConnected in the room: ${currentlyConnected}`)
 
+  const stats = {
+    activeUsers: connectionData.Items.length,
+    itemsSold: 0,
+    currentDiscount: 0
+  }
+
   response = {
     type: "NEW_MESSAGE",
-    message,
+    data:{
+      message,
+      stats
+    },
     createdAt: now
   }
   
