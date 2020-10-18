@@ -100,11 +100,32 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SendMessageFunction.Arn}/invocations
+  JoinRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SimpleChatWebSocket
+      RouteKey: joinroom
+      AuthorizationType: NONE
+      OperationName: JoinRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref JoinInteg
+  JoinInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref SimpleChatWebSocket
+      Description: Send Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: 
+        Fn::Sub:
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${JoinRoomFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
     - ConnectRoute
     - SendRoute
+    - JoinRoute
     - DisconnectRoute
     Properties:
       ApiId: !Ref SimpleChatWebSocket
@@ -237,6 +258,35 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref SendMessageFunction
       Principal: apigateway.amazonaws.com
+  JoinRoomFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: joinroom/
+      Handler: app.handler
+      MemorySize: 256
+      Runtime: nodejs10.x
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+          ROOMS: !Ref ChatRoomsTable
+          MESSAGES: !Ref MessagesTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: "*"
+      - Statement:
+        - Effect: Allow
+          Action:
+          - 'execute-api:ManageConnections'
+          Resource:
+          - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SimpleChatWebSocket}/*'
+  JoinRoomPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - SimpleChatWebSocket
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref JoinRoomFunction
+      Principal: apigateway.amazonaws.com
   AuthenticateFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -295,6 +345,10 @@ Outputs:
   SendMessageFunctionArn:
     Description: "SendMessage function ARN"
     Value: !GetAtt SendMessageFunction.Arn
+
+  JoinRoomFunctionArn:
+      Description: "JoinRoom function ARN"
+      Value: !GetAtt JoinRoomFunction.Arn
 
   AuthenticateFunctionArn:
     Description: "Autenticate function ARN"

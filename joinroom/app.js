@@ -22,7 +22,6 @@ exports.handler = async event => {
   console.log("Process env:", process.env);
 
   let now = Date.now();
-  let connectionData;
   let rooms;
   let room;
   let response = {}
@@ -31,11 +30,9 @@ exports.handler = async event => {
   console.log("Got data:", postData.data);
 
   if(!postData.data){
-    message.text = JSON.parse(postData).message
     message.roomId = JSON.parse(postData).roomId
     message.userId = JSON.parse(postData).userId
   }else{
-    message.text = postData.data.message
     message.roomId = postData.data.roomId
     message.userId = postData.data.userId
   }
@@ -58,27 +55,9 @@ exports.handler = async event => {
     }
     console.log("Selected room: ", room)
 
-     // READ 2
-    connectionData = await ddb.scan({ TableName: TABLE_NAME, ProjectionExpression: 'connectionId, userId' }).promise();
-    console.log("rooms:", rooms);
-
   } catch (e) {
     console.log("error:", e)
     return { statusCode: 500, body: e.stack };
-  }
-  console.log("All Connected users: ", connectionData.Items)
-
-  // SAVE MESSAGE
-  const newMessage = {
-    TableName: MESSAGES,
-    Item: message
-  };
-
-  try {
-    await ddb.put(newMessage).promise();
-  } catch (err) {
-    console.log("errr", err)
-    return { statusCode: 500, body: 'Failed to connect to DB: ' + JSON.stringify(err) };
   }
 
   room.updatedAt = now
@@ -105,45 +84,26 @@ exports.handler = async event => {
     return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) };
   }
 
-  let hitt = false
-  const currentlyConnected = filter(connectionData.Items, Item => {
-    // console.log("users - current", room.users, Item.userId.toString())
-
-    hitt = (find(room.users, uid => { return uid === Item.userId.toString() })) ? true : false
-    // console.log(hitt)
-
-    return hitt
-  })
-  console.log(`currentlyConnected in the room: ${currentlyConnected}`)
-
-  const stats = {
-    activeUsers: connectionData.Items.length,
-    itemsSold: 0,
-    currentDiscount: 0
-  }
-
   response = {
-    type: "NEW_MESSAGE",
+    type: "WELCOME_TO_ROOM",
     data:{
-      message,
-      stats
+      numberOfMembers: room.users.length,
+      messages: []
     },
     createdAt: now
   }
   
-  const postCalls = currentlyConnected.map(async ({ connectionId, userId }) => {
-    try {
-      await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(response)}).promise(); 
-    } catch (e) {
-      if (e.statusCode === 410) {
-        console.log(`Found stale connection, deleting ${connectionId}`);
-        await ddb.delete({ TableName: TABLE_NAME, Key: { connectionId } }).promise();
-      } else {
-        console.log("Error sending a message: ", e)
-        throw e;
-      }
+  try {
+    await apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(response)}).promise(); 
+  } catch (e) {
+    if (e.statusCode === 410) {
+      console.log(`Found stale connection, deleting ${connectionId}`);
+      await ddb.delete({ TableName: TABLE_NAME, Key: { connectionId } }).promise();
+    } else {
+      console.log("Error sending a message: ", e)
+      throw e;
     }
-  });
+  }
   
   try {
     await Promise.all(postCalls);

@@ -1,0 +1,15 @@
+{
+  "name": "send-message",
+  "version": "1.0.0",
+  "description": "sendmessage example for WebSockets on API Gateway",
+  "main": "src/app.js",
+  "author": "SAM CLI",
+  "license": "MIT",
+  "dependencies": {
+    "lodash": "^4.17.20",
+    "uuid": "^8.3.1"
+  },
+  "devDependencies": {
+    "aws-sdk": "^2.739.0"
+  }
+}
